@@ -6,10 +6,10 @@ library(sf)
 library(scales)
 
 # 1. Data Processing & Global Setup ----------------------------------------
-processed_data <- read_csv("../data/processed/housing_with_county.csv") |>
+processed_data <- read_csv("data/processed/housing_with_county.csv") |>
   mutate(median_income_usd = median_income * 10000)
 
-counties_geojson <- st_read("../data/raw/cal_counties.geojson")
+counties_geojson <- st_read("data/raw/cal_counties.geojson")
 
 # Helper for Map Coloring
 house_value_pal <- colorBin(
