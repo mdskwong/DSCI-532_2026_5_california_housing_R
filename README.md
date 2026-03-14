@@ -48,14 +48,27 @@ Navigate to the project root:
 ```bash
 cd DSCI-532_2026_5_california_housing_R
 ```
-Create the environment
 
+Install System Dependencies (Linux/macOS)
+
+The `sf` package requires spatial libraries. If you encounter errors during package installation, ensure these are installed:
+
+macOS
+```bash
+brew install gdal
+```
+
+Ubuntu/Debian
+```bash
+sudo apt install libgdal-dev libgeos-dev libproj-dev
+```
+
+Create the environment
 ```bash
 Rscript -e "install.packages(c('shiny', 'bslib', 'tidyverse', 'leaflet', 'sf', 'scales', 'bsicons'))"
 ```
 
 Launch the dashboard
-
 ```bash
 Rscript -e "shiny::runApp('app.R', launch.browser = FALSE, port = 8000)"
 ```
