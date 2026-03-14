@@ -6,10 +6,10 @@ library(sf)
 library(scales)
 
 # 1. Data Processing & Global Setup ----------------------------------------
-processed_data <- read_csv("data/processed/housing_with_county.csv") %>%
+processed_data <- read_csv("../data/processed/housing_with_county.csv") |>
   mutate(median_income_usd = median_income * 10000)
 
-counties_geojson <- st_read("data/raw/cal_counties.geojson")
+counties_geojson <- st_read("../data/raw/cal_counties.geojson")
 
 # Helper for Map Coloring
 house_value_pal <- colorBin(
@@ -21,7 +21,7 @@ house_value_pal <- colorBin(
 # 2. UI Definition ---------------------------------------------------------
 ui <- page_fluid(
   theme = bs_theme(version = 5),
-  titlePanel("California Housing Dashboard (R Version)"),
+  titlePanel("California Housing Dashboard"),
   
   layout_sidebar(
     sidebar = sidebar(
@@ -43,12 +43,6 @@ ui <- page_fluid(
           selectizeInput("county_select", "County:", 
                          choices = sort(unique(processed_data$county)), 
                          multiple = TRUE)
-        ),
-        accordion_panel(
-          "Socio-economic",
-          sliderInput("income_slider", "Median income:", 
-                      min(processed_data$median_income_usd), max(processed_data$median_income_usd),
-                      value = c(quantile(processed_data$median_income_usd, 0.75), max(processed_data$median_income_usd)))
         )
       )
     ),
@@ -85,12 +79,8 @@ ui <- page_fluid(
         width = 1,
         card(
           card_header("Distribution"),
-          selectInput("dist_var", NULL, choices = c("median_house_value", "median_income_usd", "housing_median_age")),
+          selectInput("dist_var", NULL, choices = c("median_house_value", "median_income_usd")),
           plotOutput("dist_plot", height = "250px")
-        ),
-        card(
-          card_header("Ocean Proximity Comparison"),
-          plotOutput("box_plot", height = "250px")
         )
       )
     )
@@ -102,40 +92,51 @@ server <- function(input, output, session) {
   
   # Reactive Reset
   observeEvent(input$reset_button, {
-    updateSliderInput(session, "house_val_slider", value = range(processed_data$median_house_value))
-    updateSelectizeInput(session, "county_select", selected = character(0))
+    # 1. Reset House Value Slider (Full Range)
+    updateSliderInput(session, "house_val_slider", 
+                      value = range(processed_data$median_house_value))
+    
+    # 2. Reset House Age Slider (Full Range)
+    updateSliderInput(session, "age_slider", 
+                      value = range(processed_data$housing_median_age))
+    
+    # 3. Reset Ocean Proximity (Original 3 selections)
+    updateCheckboxGroupInput(session, "ocean_checkbox", 
+                             selected = c("<1H OCEAN", "NEAR OCEAN", "NEAR BAY"))
+    
+    # 4. Reset County Selection (Clear all)
+    updateSelectizeInput(session, "county_select", 
+                         selected = character(0))
   })
   
   # Reactive Data Filtering
   filtered_df <- reactive({
-    data <- processed_data %>%
+    data <- processed_data |>
       filter(
         median_house_value >= input$house_val_slider[1],
         median_house_value <= input$house_val_slider[2],
-        median_income_usd >= input$income_slider[1],
-        median_income_usd <= input$income_slider[2],
         ocean_proximity %in% input$ocean_checkbox
       )
     
     if (length(input$county_select) > 0) {
-      data <- data %>% filter(county %in% input$county_select)
+      data <- data |> filter(county %in% input$county_select)
     }
     data
   })
   
   # Map Rendering
   output$map <- renderLeaflet({
-    leaflet() %>%
-      addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
-      addProviderTiles(providers$OpenStreetMap, group = "Street Map") %>%
-      addPolygons(data = counties_geojson, color = "#444", weight = 1, fillOpacity = 0.1) %>%
-      addLayersControl(baseGroups = c("Satellite", "Street Map"))
+    leaflet() |>
+      addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") |>
+      addProviderTiles(providers$OpenStreetMap, group = "Street Map") |>
+      addPolygons(data = counties_geojson, color = "#444", weight = 1, fillOpacity = 0.1) |>
+      addLayersControl(baseGroups = c("Street Map", "Satellite"))
   })
   
   observe({
     df <- filtered_df()
-    leafletProxy("map", data = df) %>%
-      clearMarkerClusters() %>%
+    leafletProxy("map", data = df) |>
+      clearMarkerClusters() |>
       addCircleMarkers(
         lng = ~longitude, lat = ~latitude,
         radius = 4, color = ~house_value_pal(median_house_value),
@@ -157,8 +158,27 @@ server <- function(input, output, session) {
   
   # Value Box Outputs
   output$median_house_val <- renderText({
-    val <- median(filtered_df()$median_house_value, na.rm = TRUE)
+    df <- filtered_df()
+    
+    # Handle empty datasets gracefully
+    validate(
+      need(nrow(df) > 0, "No data")
+    )
+    
+    val <- median(df$median_house_value, na.rm = TRUE)
     paste0("$", comma(round(val)))
+  })
+  
+  output$median_income_val <- renderText({
+    df <- filtered_df()
+    
+    validate(
+      need(nrow(df) > 0, "No data")
+    )
+    
+    # Using the median_income_usd column created in global setup
+    val_inc <- median(df$median_income_usd, na.rm = TRUE)
+    paste0("$", comma(round(val_inc)))
   })
 }
 
